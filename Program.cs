@@ -1,12 +1,15 @@
-﻿
-using System.Runtime.InteropServices;
+﻿using Amazon;
 using Amazon.Extensions.NETCore.Setup;
+using Amazon.Runtime;
 using Amazon.SQS;
-using AwsSqsMicroserviceTemplate;
+using AwsSqsMicroserviceTemplate.Configuration;
+using AwsSqsMicroserviceTemplate.Handlers;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
+
+namespace AwsSqsMicroserviceTemplate;
 
 public class Program
 {
@@ -38,10 +41,24 @@ public class Program
         {
             services.AddOptions();
 
-            services.AddHostedService<BackgroundServiceWorker>();
+            services.AddHostedService<SqsBackgroundService>();
 
-            services.AddAWSService<IAmazonSQS>();
+            var sqsConfiguration = hostContext.Configuration.GetSection(AwsSqsConfiguration.Section);
+            services.Configure<AwsSqsConfiguration>(sqsConfiguration);
+            
+            //NOTE: A production application should use temporary keys via IAM roles on running instances
+            var awsOptions = new AWSOptions()
+            {
+                Region = RegionEndpoint.USEast2,
+                Credentials = new BasicAWSCredentials(
+                    hostContext.Configuration[AwsSqsConfiguration.SectionAccessKey],
+                    hostContext.Configuration[AwsSqsConfiguration.SectionSecretKey]
+                )
+            };
+            
+            services.AddAWSService<IAmazonSQS>(awsOptions);
 
+            services.AddSingleton<IMessageHandler, ExampleHandler>();
         });
 
         hostBuilder.UseSerilog((_, _, logConfig) =>
@@ -54,8 +71,3 @@ public class Program
         return hostBuilder;
     }
 }
-
-
-
-
-
